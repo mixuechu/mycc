@@ -94,6 +94,14 @@ mycc/
 
 添加新 Skill：`.claude/skills/技能名/SKILL.md`
 
+## 🚀 即将上线
+
+**微信小程序版 Claude Code**
+
+在微信里直接使用你的 CC —— 随时随地，掏出手机就能和搭档对话。
+
+敬请期待。
+
 ## 常见问题
 
 **Q: Hooks 没生效？**
