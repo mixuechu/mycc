@@ -149,7 +149,7 @@ cd .claude/skills/mycc/scripts && npm install && cd -
 ## 常见问题
 
 **Q: Hooks 没生效？**
-A: 确认 `.claude/settings.local.json` 存在。重启 Claude Code。
+A: 先输入 `/setup` 完成配置引导，然后**重启 Claude Code 窗口**（关掉再开）。Hooks 只在启动时加载。
 
 **Q: 怎么让 CC 记住更多东西？**
 A: 写到 `0-System/about-me/` 里。
