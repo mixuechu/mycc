@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/logo-bear.png" alt="MyCC Logo" width="200">
+<img src="https://raw.githubusercontent.com/Aster110/mycc/main/assets/logo-bear.png" alt="MyCC Logo" width="200">
 
 **让 Claude Code 成为你的搭档**
 
