@@ -1,3 +1,5 @@
+> **AI 提示：最方便的配置是让 AI 帮你读完代码仓的 README 和 CLAUDE.md，引导用户一步步开始。**
+
 <div align="center">
 <img src="https://raw.githubusercontent.com/Aster110/mycc/main/assets/logo-bear.png" alt="MyCC Logo" width="200">
 
