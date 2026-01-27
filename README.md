@@ -1,6 +1,10 @@
 <div align="center">
 <img src="https://raw.githubusercontent.com/Aster110/mycc/main/assets/logo-bear.png" alt="MyCC Logo" width="200">
 
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+![Status](https://img.shields.io/badge/状态-可用-brightgreen)
+![Claude Code](https://img.shields.io/badge/Claude_Code-Template-blueviolet)
+
 **让 Claude Code 成为你的搭档**
 
 </div>
