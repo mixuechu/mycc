@@ -6,6 +6,7 @@ import { existsSync, readFileSync, unlinkSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import type { DeviceConfig } from "./types.js";
+import { getRoot } from "./platform.js";
 
 /**
  * 获取配置目录（统一逻辑）
@@ -66,7 +67,7 @@ export function deleteConfig(cwd: string): void {
  */
 export function findProjectRoot(startDir: string): string | null {
   let current = startDir;
-  const root = "/";
+  const root = getRoot(startDir);
 
   while (current !== root) {
     // 检查是否包含 .claude 目录
