@@ -33,3 +33,6 @@ dist/
 
 # 运行时配置
 .claude/skills/mycc/current.json
+
+# 测试文件
+.claude/skills/mycc/scripts/tests/
