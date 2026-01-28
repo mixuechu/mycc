@@ -153,9 +153,9 @@ cd .claude/skills/mycc/scripts && npm install && cd -
 |------|------|
 | Claude Code | **必须是官方原版**，fork 版本可能不兼容 |
 | 网络 | **中国用户需全程开启 VPN/代理**（cloudflared + Worker 注册都需要） |
-| 系统 | ✅ macOS、✅ Linux、❌ Windows、⚠️ WSL（不稳定） |
+| 系统 | ✅ macOS、✅ Linux、✅ Windows |
 
-> ⚠️ **Windows/WSL 用户注意**：目前 Windows 原生和 WSL 环境都存在兼容性问题，建议使用 macOS 或 Linux。如确需使用，可以让 AI 帮你排查，代码在 `.claude/skills/mycc/scripts/`
+> 💡 **AI 安装指南**：如果遇到问题，可以让 AI 阅读 [`docs/BACKEND_SETUP_FOR_AI.md`](docs/BACKEND_SETUP_FOR_AI.md)，帮你排查。
 >
 > 💡 **关于第三方 Claude Code**：目前仅测试了官方原版，第三方 fork 版本（如支持其他模型的版本）的兼容性支持在规划中，欢迎提 Issue 反馈需求。
 

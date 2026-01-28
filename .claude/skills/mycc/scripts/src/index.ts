@@ -17,28 +17,19 @@ import { join } from "path";
 import type { DeviceConfig, RegisterResult } from "./types.js";
 import { generateCode, generateDeviceId, retryWithBackoff, waitForReady } from "./utils.js";
 import { getConfigDir, loadConfig, deleteConfig, findProjectRoot } from "./config.js";
+import {
+  killPortProcess,
+  detectCloudflaredPath,
+  checkCloudflared,
+  getCloudflaredInstallHint,
+  NULL_DEVICE,
+} from "./platform.js";
 import qrcode from "qrcode-terminal";
 import chalk from "chalk";
 import { HttpServer } from "./http-server.js";
 import { checkCCAvailable } from "./cc-bridge.js";
 
 const PORT = process.env.PORT || 8080;
-
-// 杀掉占用端口的旧进程
-function killExistingProcess(port: number): void {
-  try {
-    const pid = execSync(`lsof -i :${port} -t 2>/dev/null`).toString().trim();
-    if (pid) {
-      console.log(chalk.yellow(`发现端口 ${port} 被占用 (PID: ${pid})，正在关闭旧进程...`));
-      execSync(`kill ${pid}`);
-      // 等待进程完全退出
-      execSync("sleep 0.5");
-      console.log(chalk.green("✓ 旧进程已关闭\n"));
-    }
-  } catch {
-    // 没有进程占用端口，忽略
-  }
-}
 const WORKER_URL = process.env.WORKER_URL || "https://api.mycc.dev";
 const PACKAGE_NAME = "mycc-backend";
 
@@ -88,7 +79,8 @@ async function startServer(args: string[]) {
   await checkVersionUpdate();
 
   // 杀掉旧进程，确保端口可用
-  killExistingProcess(Number(PORT));
+  console.log(chalk.gray("检查端口占用..."));
+  await killPortProcess(Number(PORT));
 
   // 检查 CC 是否可用
   console.log("检查 Claude Code CLI...");
@@ -105,7 +97,7 @@ async function startServer(args: string[]) {
   const cloudflaredAvailable = await checkCloudflared();
   if (!cloudflaredAvailable) {
     console.error(chalk.red("错误: cloudflared 未安装"));
-    console.error("安装方法: brew install cloudflare/cloudflare/cloudflared");
+    console.error(getCloudflaredInstallHint());
     process.exit(1);
   }
   console.log(chalk.green("✓ cloudflared 可用\n"));
@@ -192,11 +184,12 @@ async function startServer(args: string[]) {
   const tunnelReady = await waitForReady(
     async () => {
       try {
-        const result = execSync(
-          `curl -s --max-time 5 "${tunnelUrl}/health"`,
-          { timeout: 8000 }
-        ).toString();
-        return result.includes("ok");
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(`${tunnelUrl}/health`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        const text = await response.text();
+        return text.includes("ok");
       } catch {
         return false;
       }
@@ -356,21 +349,10 @@ async function startServer(args: string[]) {
   });
 }
 
-// cloudflared 路径（优先使用环境变量，否则尝试常见路径）
-const CLOUDFLARED_PATH = process.env.CLOUDFLARED_PATH
-  || "/opt/homebrew/bin/cloudflared"  // macOS ARM
-  || "/usr/local/bin/cloudflared";    // macOS Intel / Linux
-
-async function checkCloudflared(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn(CLOUDFLARED_PATH, ["--version"]);
-    proc.on("close", (code) => resolve(code === 0));
-    proc.on("error", () => resolve(false));
-  });
-}
+// cloudflared 路径（从 platform.ts 检测）
+const CLOUDFLARED_PATH = detectCloudflaredPath();
 
 // 向 Worker 注册 tunnel URL，返回 { token, isNewDevice }
-// 用 curl 而不是 Node.js fetch，因为 undici 和代理配合不稳定
 async function registerToWorker(
   tunnelUrl: string,
   pairCode: string,
@@ -388,18 +370,23 @@ async function registerToWorker(
       if (deviceId) {
         requestData.deviceId = deviceId;
       }
-      const data = JSON.stringify(requestData);
 
-      const response = execSync(
-        `curl -s --max-time 20 --retry 2 --retry-delay 1 -X POST "${WORKER_URL}/register" -H "Content-Type: application/json" -d '${data}'`,
-        { timeout: 30000 }
-      ).toString();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const response = await fetch(`${WORKER_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestData),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-      if (!response || response.trim() === "") {
+      const text = await response.text();
+      if (!text || text.trim() === "") {
         throw new Error("空响应");
       }
 
-      const parsed = JSON.parse(response) as { token?: string; isNewDevice?: boolean; error?: string };
+      const parsed = JSON.parse(text) as { token?: string; isNewDevice?: boolean; error?: string };
 
       if (parsed.token) {
         console.log(chalk.green(`✓ 注册成功 (第 ${attemptCount} 次尝试)`));
@@ -446,16 +433,17 @@ async function registerToWorker(
 async function verifyWorkerMapping(token: string, expectedTunnelUrl: string): Promise<boolean> {
   const result = await retryWithBackoff(
     async () => {
-      const response = execSync(
-        `curl -s --max-time 10 "${WORKER_URL}/info/${token}"`,
-        { timeout: 15000 }
-      ).toString();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${WORKER_URL}/info/${token}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-      if (!response || response.trim() === "") {
+      const text = await response.text();
+      if (!text || text.trim() === "") {
         return null; // 空响应，重试
       }
 
-      const parsed = JSON.parse(response) as { tunnelUrl?: string; error?: string };
+      const parsed = JSON.parse(text) as { tunnelUrl?: string; error?: string };
 
       if (parsed.error) {
         console.log(chalk.gray(`  Worker 返回错误: ${parsed.error}`));
@@ -489,8 +477,12 @@ async function verifyWorkerMapping(token: string, expectedTunnelUrl: string): Pr
 // 单次尝试启动 tunnel（内部函数）
 function tryStartTunnel(port: number, timeout: number): Promise<{ url: string | null; proc: ReturnType<typeof spawn> | null }> {
   return new Promise((resolve) => {
-    const proc = spawn(CLOUDFLARED_PATH, ["tunnel", "--config", "/dev/null", "--url", `http://localhost:${port}`], {
+    // Windows: 路径加引号防止空格问题，shell: true 让系统 shell 解析命令
+    const cmd = `"${CLOUDFLARED_PATH}" tunnel --config ${NULL_DEVICE} --url http://localhost:${port}`;
+    const proc = spawn(cmd, [], {
       stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
+      windowsHide: true,
     });
 
     let resolved = false;

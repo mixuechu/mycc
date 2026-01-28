@@ -3,21 +3,13 @@
  */
 
 import { query } from "@anthropic-ai/claude-code";
-import { execSync } from "child_process";
 import type { CCAdapter, SSEEvent } from "./interface.js";
 import type { ChatParams, ConversationSummary, ConversationHistory } from "../types.js";
 import { getConversationList, getConversation } from "../history.js";
+import { detectClaudeCliPath, isWindows } from "../platform.js";
 
-// 检测 Claude CLI 路径
-function detectClaudeCliPath(): string {
-  try {
-    return execSync("which claude", { encoding: "utf-8" }).trim();
-  } catch {
-    return "/usr/local/bin/claude"; // fallback
-  }
-}
-
-const CLAUDE_CLI_PATH = detectClaudeCliPath();
+// 检测 Claude CLI 路径（跨平台）
+const { executable: CLAUDE_EXECUTABLE, cliPath: CLAUDE_CLI_PATH } = detectClaudeCliPath();
 
 /**
  * 官方 Claude Code SDK Adapter
@@ -29,17 +21,22 @@ export class OfficialAdapter implements CCAdapter {
   async *chat(params: ChatParams): AsyncIterable<SSEEvent> {
     const { message, sessionId, cwd } = params;
 
+    // 构造 SDK 选项（Windows 不指定 executable，使用 native binary）
+    const sdkOptions: Parameters<typeof query>[0]["options"] = {
+      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+      cwd: cwd || process.cwd(),
+      resume: sessionId || undefined,
+      permissionMode: "bypassPermissions",
+    };
+
+    // 如果检测到需要用 node 执行（npm 全局安装），设置 executable
+    if (CLAUDE_EXECUTABLE === "node") {
+      sdkOptions.executable = "node" as const;
+    }
+
     for await (const sdkMessage of query({
       prompt: message,
-      options: {
-        // 指定 CLI 路径，确保完整加载配置（包括 skills）
-        executable: "node" as const,
-        pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-        cwd: cwd || process.cwd(),
-        resume: sessionId || undefined,
-        // 小程序端无法交互确认权限，使用 bypassPermissions
-        permissionMode: "bypassPermissions",
-      },
+      options: sdkOptions,
     })) {
       yield sdkMessage as SSEEvent;
     }

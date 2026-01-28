@@ -2,7 +2,7 @@
  * 工具函数
  */
 
-import { customAlphabet } from "nanoid";
+import { randomBytes } from "crypto";
 
 // 字符集：大写字母 + 数字，去掉易混淆的 I/O/0/1
 const SAFE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -10,14 +10,26 @@ const SAFE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 // 小写字母 + 数字（用于 deviceId）
 const DEVICE_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
+/**
+ * 生成指定长度的随机字符串（使用 crypto，跨平台兼容）
+ */
+function generateRandomString(chars: string, length: number): string {
+  const bytes = randomBytes(length);
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars[bytes[i] % chars.length];
+  }
+  return result;
+}
+
 /** 生成 6 位配对码/连接码 */
-export const generateCode = customAlphabet(SAFE_CHARS, 6);
+export const generateCode = () => generateRandomString(SAFE_CHARS, 6);
 
 /** 生成 6 位 token（同 generateCode） */
 export const generateToken = generateCode;
 
 /** 生成 12 位设备 ID */
-export const generateDeviceId = customAlphabet(DEVICE_ID_CHARS, 12);
+export const generateDeviceId = () => generateRandomString(DEVICE_ID_CHARS, 12);
 
 /**
  * 通用重试函数
