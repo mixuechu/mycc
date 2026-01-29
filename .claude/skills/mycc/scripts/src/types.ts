@@ -28,15 +28,11 @@ export interface PairState {
 
 // ============ 对话与历史 ============
 
-/** 图片数据（从 image-utils 重新导出，保持兼容） */
-export { type ImageData } from "./image-utils.js";
-
 /** Chat 请求参数 */
 export interface ChatParams {
   message: string;
   sessionId?: string;
   cwd: string;
-  images?: import("./image-utils.js").ImageData[];
 }
 
 /** Chat 回调选项 */
@@ -51,15 +47,17 @@ export interface ChatOptions extends ChatParams, ChatCallbacks {}
 
 /** JSONL 行结构 */
 export interface RawHistoryLine {
-  type: "user" | "assistant" | "system" | "result";
+  type: "user" | "assistant" | "system" | "result" | "summary";
   message?: {
     role?: string;
     content?: unknown;
     id?: string;
   };
-  sessionId: string;
-  timestamp: string;
-  uuid: string;
+  summary?: string;  // summary 类型消息的摘要文本
+  leafUuid?: string;  // summary 消息：最后一条被压缩的消息 UUID
+  sessionId?: string;
+  timestamp?: string;
+  uuid?: string;
   parentUuid?: string | null;
   isSidechain?: boolean;
   cwd?: string;

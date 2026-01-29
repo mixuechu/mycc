@@ -102,12 +102,14 @@ function parseConversationSummary(
       const parsed = JSON.parse(line) as RawHistoryLine;
       messageCount++;
 
-      // 跟踪时间戳
-      if (!startTime || parsed.timestamp < startTime) {
-        startTime = parsed.timestamp;
-      }
-      if (!lastTime || parsed.timestamp > lastTime) {
-        lastTime = parsed.timestamp;
+      // 跟踪时间戳（summary 消息没有 timestamp，跳过）
+      if (parsed.timestamp) {
+        if (!startTime || parsed.timestamp < startTime) {
+          startTime = parsed.timestamp;
+        }
+        if (!lastTime || parsed.timestamp > lastTime) {
+          lastTime = parsed.timestamp;
+        }
       }
 
       // 提取最后一条消息预览（user 消息，过滤系统标签）
@@ -146,6 +148,7 @@ function parseConversationSummary(
 
 /**
  * 获取具体对话内容
+ * 优化：只返回最后一个 summary 之后的消息，节省流量
  */
 export function getConversation(
   cwd: string,
@@ -165,14 +168,33 @@ export function getConversation(
 
   const content = readFileSync(filePath, "utf-8");
   const lines = content.trim().split("\n").filter(line => line.trim());
-  const messages: RawHistoryLine[] = [];
+  const allMessages: unknown[] = [];
+  let lastSummaryIndex = -1;
 
-  for (const line of lines) {
+  // 第一遍：解析所有消息，找到最后一个 summary 的位置
+  for (let i = 0; i < lines.length; i++) {
     try {
-      const parsed = JSON.parse(line) as RawHistoryLine;
-      messages.push(parsed);
+      const parsed = JSON.parse(lines[i]);
+      allMessages.push(parsed);
+
+      // 记录最后一个 summary 的索引
+      if (parsed.type === "summary") {
+        lastSummaryIndex = i;
+      }
     } catch {
       // 忽略解析错误的行
+      allMessages.push(null);
+    }
+  }
+
+  // 第二遍：只收集最后一个 summary 之后的消息
+  const messages: RawHistoryLine[] = [];
+  const startIndex = lastSummaryIndex + 1; // summary 之后开始
+
+  for (let i = startIndex; i < allMessages.length; i++) {
+    const msg = allMessages[i];
+    if (msg && typeof msg === "object" && "type" in msg) {
+      messages.push(msg as RawHistoryLine);
     }
   }
 

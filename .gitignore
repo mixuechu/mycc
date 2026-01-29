@@ -34,5 +34,6 @@ dist/
 # 运行时配置
 .claude/skills/mycc/current.json
 
-# 测试文件
+# 测试文件和任务文档（开发辅助）
 .claude/skills/mycc/scripts/tests/
+.claude/skills/mycc/scripts/tasks/
