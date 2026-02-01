@@ -18,23 +18,12 @@
 
 收到用户的 Webhook URL 后：
 
-### 1. 设置环境变量
+### 1. 修改脚本
 
-**macOS / Linux**：编辑 `~/.zshrc` 或 `~/.bashrc`：
+打开 `.claude/skills/tell-me/send.js`，把第 9 行的 webhook 替换成用户提供的 URL：
 
-```bash
-export FEISHU_WEBHOOK='用户提供的URL'
-```
-
-然后执行 `source ~/.zshrc` 或重启终端。
-
-**Windows**：
-```powershell
-# 永久设置
-[Environment]::SetEnvironmentVariable("FEISHU_WEBHOOK", "用户提供的URL", "User")
-
-# 当前会话临时设置
-$env:FEISHU_WEBHOOK = "用户提供的URL"
+```js
+const webhook = '用户提供的URL';
 ```
 
 ### 2. 测试

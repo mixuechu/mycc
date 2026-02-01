@@ -12,13 +12,19 @@ if (!title || !content) {
   process.exit(1);
 }
 
-// 从环境变量或配置文件读取 webhook
-// 用户需要配置自己的飞书 webhook，参考 配置SOP.md
-const webhook = process.env.FEISHU_WEBHOOK || '';
+// ⚠️ 请替换成你自己的飞书 webhook
+// 参考 配置SOP.md 获取 webhook 地址
+const webhook = 'YOUR_FEISHU_WEBHOOK_HERE';
 
-if (!webhook) {
-  console.error('❌ 未配置飞书 webhook');
-  console.error('请设置环境变量 FEISHU_WEBHOOK 或参考 配置SOP.md');
+if (webhook === 'YOUR_FEISHU_WEBHOOK_HERE') {
+  console.error('❌ 飞书 webhook 未配置');
+  console.error('');
+  console.error('请按以下步骤配置：');
+  console.error('1. 打开飞书客户端 → 创建群 → 设置 → 群机器人 → 添加自定义机器人');
+  console.error('2. 复制 Webhook 地址');
+  console.error('3. 编辑 .claude/skills/tell-me/send.js，替换第 9 行的 webhook');
+  console.error('');
+  console.error('详见：.claude/skills/tell-me/配置SOP.md');
   process.exit(1);
 }
 
