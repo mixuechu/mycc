@@ -54,7 +54,7 @@ export interface ChatOptions extends ChatParams, ChatCallbacks {}
 
 /** JSONL 行结构 */
 export interface RawHistoryLine {
-  type: "user" | "assistant" | "system" | "result" | "summary";
+  type: "user" | "assistant" | "system" | "result" | "summary" | "custom-title";
   message?: {
     role?: string;
     content?: unknown;
@@ -62,6 +62,7 @@ export interface RawHistoryLine {
   };
   summary?: string;  // summary 类型消息的摘要文本
   leafUuid?: string;  // summary 消息：最后一条被压缩的消息 UUID
+  customTitle?: string;  // custom-title 类型：用户自定义标题
   sessionId?: string;
   timestamp?: string;
   uuid?: string;
@@ -79,6 +80,8 @@ export interface ConversationSummary {
   lastMessagePreview: string;
   customTitle?: string | null;  // 用户自定义标题（null = 未改名）
   firstPrompt?: string;          // 第一条消息（用于预览）
+  modified?: string;             // 修改时间（ISO 字符串，兼容索引格式）
+  isActive?: boolean;            // 是否为活跃会话（644权限）
 }
 
 /** 对话详情 */

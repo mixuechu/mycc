@@ -8,7 +8,7 @@
  *   cc-mp status
  */
 
-import { spawn, execSync } from "child_process";
+import { execSync } from "child_process";
 import { mkdirSync, writeFileSync, existsSync, appendFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -19,10 +19,8 @@ import { generateCode, generateDeviceId, retryWithBackoff, waitForReady } from "
 import { getConfigDir, loadConfig, deleteConfig, findProjectRoot } from "./config.js";
 import {
   killPortProcess,
-  detectCloudflaredPath,
   checkCloudflared,
   getCloudflaredInstallHint,
-  NULL_DEVICE,
 } from "./platform.js";
 import qrcode from "qrcode-terminal";
 import chalk from "chalk";
@@ -30,6 +28,8 @@ import { HttpServer } from "./http-server.js";
 import { checkCCAvailable } from "./cc-bridge.js";
 import { startScheduler, stopScheduler, type Task } from "./scheduler.js";
 import { adapter } from "./adapters/index.js";
+import { CloudflareProvider } from "./tunnel-provider.js";
+import { TunnelManager } from "./tunnel-manager.js";
 
 const PORT = process.env.PORT || 8080;
 const WORKER_URL = process.env.WORKER_URL || "https://api.mycc.dev";
@@ -254,48 +254,49 @@ ${skillLine}
   };
   startScheduler(cwd, executeTask);
 
-  // 启动 cloudflared tunnel
+  // 启动 cloudflared tunnel（使用 TunnelManager 保活）
   console.log(chalk.yellow("启动 tunnel...\n"));
-  const tunnelUrl = await startTunnel(Number(PORT));
 
-  if (!tunnelUrl) {
-    console.error(chalk.red("错误: 无法获取 tunnel URL"));
+  // 创建 Provider 和 Manager
+  const tunnelProvider = new CloudflareProvider(15000);
+
+  // tunnelUrl 需要可变，因为重启时会更新
+  let tunnelUrl: string;
+
+  // 创建 TunnelManager，设置重启成功回调
+  const tunnelManager = new TunnelManager({
+    localPort: Number(PORT),
+    onRestartSuccess: async (newUrl: string) => {
+      console.log(chalk.cyan(`[TunnelManager] 更新 tunnelUrl: ${newUrl}`));
+      tunnelUrl = newUrl;
+
+      // 重新注册到 Worker
+      console.log(chalk.gray("重新注册到中转服务器..."));
+      const newRegisterResult = await registerToWorker(newUrl, pairCode, deviceId);
+      if (newRegisterResult?.token) {
+        console.log(chalk.green("✓ 重新注册成功"));
+      } else {
+        console.warn(chalk.yellow("⚠️ 重新注册失败，小程序可能无法访问"));
+      }
+    },
+    onGiveUp: () => {
+      console.error(chalk.red("╔════════════════════════════════════════╗"));
+      console.error(chalk.red("║  Tunnel 重连失败次数过多，已放弃       ║"));
+      console.error(chalk.red("║  请手动重启: /mycc                     ║"));
+      console.error(chalk.red("╚════════════════════════════════════════╝"));
+    },
+  });
+
+  // 启动 tunnel
+  try {
+    tunnelUrl = await tunnelManager.start(tunnelProvider);
+  } catch (error) {
+    console.error(chalk.red("错误: 无法启动 tunnel"), error);
     process.exit(1);
   }
 
-  console.log(chalk.green(`✓ Tunnel 已启动: ${tunnelUrl}\n`));
-
-  // 等待 tunnel 完全就绪（主动探测，最多 30 秒）
-  console.log(chalk.gray("等待 tunnel 就绪..."));
-  const tunnelReady = await waitForReady(
-    async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`${tunnelUrl}/health`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        const text = await response.text();
-        return text.includes("ok");
-      } catch {
-        return false;
-      }
-    },
-    {
-      maxWaitMs: 30000,
-      intervalMs: 2000,
-      onCheck: (attempt) => {
-        if (attempt > 1) {
-          console.log(chalk.gray(`  探测 ${attempt}...`));
-        }
-      }
-    }
-  );
-
-  if (tunnelReady) {
-    console.log(chalk.green("✓ Tunnel 就绪\n"));
-  } else {
-    console.log(chalk.yellow("⚠️  Tunnel 探测超时，继续尝试注册...\n"));
-  }
+  console.log(chalk.green(`✓ Tunnel 已启动: ${tunnelUrl}`));
+  console.log(chalk.gray(`  保活监控已开启（心跳间隔 60s，失败阈值 3 次）\n`));
 
   // 向 Worker 注册，获取 token（带 deviceId）
   console.log(chalk.yellow("向中转服务器注册...\n"));
@@ -412,6 +413,7 @@ ${skillLine}
       // Ctrl+C
       if (key[0] === 3) {
         console.log(chalk.yellow("\n正在退出..."));
+        tunnelManager.stop();
         stopScheduler();
         server.stop();
         process.exit(0);
@@ -426,20 +428,19 @@ ${skillLine}
   // 处理退出
   process.on("SIGINT", () => {
     console.log(chalk.yellow("\n正在退出..."));
+    tunnelManager.stop();
     stopScheduler();
     server.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
+    tunnelManager.stop();
     stopScheduler();
     server.stop();
     process.exit(0);
   });
 }
-
-// cloudflared 路径（从 platform.ts 检测）
-const CLOUDFLARED_PATH = detectCloudflaredPath();
 
 // 向 Worker 注册 tunnel URL，返回 { token, isNewDevice }
 async function registerToWorker(
@@ -561,86 +562,6 @@ async function verifyWorkerMapping(token: string, expectedTunnelUrl: string): Pr
   );
 
   return result === true;
-}
-
-// 单次尝试启动 tunnel（内部函数）
-function tryStartTunnel(port: number, timeout: number): Promise<{ url: string | null; proc: ReturnType<typeof spawn> | null }> {
-  return new Promise((resolve) => {
-    // Windows: 路径加引号防止空格问题，shell: true 让系统 shell 解析命令
-    const cmd = `"${CLOUDFLARED_PATH}" tunnel --config ${NULL_DEVICE} --url http://localhost:${port}`;
-    const proc = spawn(cmd, [], {
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
-      windowsHide: true,
-    });
-
-    let resolved = false;
-    const urlPattern = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
-
-    const handleOutput = (data: Buffer) => {
-      const output = data.toString();
-      const match = output.match(urlPattern);
-      if (match && !resolved) {
-        resolved = true;
-        resolve({ url: match[0], proc });
-      }
-    };
-
-    proc.stdout.on("data", handleOutput);
-    proc.stderr.on("data", handleOutput);
-
-    proc.on("error", (err) => {
-      console.error("Tunnel error:", err);
-      if (!resolved) {
-        resolved = true;
-        resolve({ url: null, proc: null });
-      }
-    });
-
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        // 超时，杀掉进程
-        try { proc.kill(); } catch {}
-        resolve({ url: null, proc: null });
-      }
-    }, timeout);
-  });
-}
-
-// 带重试的 startTunnel
-async function startTunnel(port: number): Promise<string | null> {
-  let attemptCount = 0;
-
-  const result = await retryWithBackoff(
-    async () => {
-      attemptCount++;
-      console.log(chalk.gray(`启动 tunnel 尝试 ${attemptCount}/3...`));
-
-      const { url } = await tryStartTunnel(port, 15000);
-
-      if (url) {
-        console.log(chalk.green(`✓ Tunnel 启动成功 (第 ${attemptCount} 次尝试)`));
-        return url;
-      }
-
-      console.log(chalk.yellow(`Tunnel 启动超时`));
-      return null;
-    },
-    {
-      maxRetries: 3,
-      delayMs: 2000,
-      onRetry: () => {
-        console.log(chalk.gray(`等待 2 秒后重试...`));
-      }
-    }
-  );
-
-  if (!result) {
-    console.error(chalk.red("错误: Tunnel 启动失败（已重试 3 次）"));
-  }
-
-  return result;
 }
 
 function showHelp() {
