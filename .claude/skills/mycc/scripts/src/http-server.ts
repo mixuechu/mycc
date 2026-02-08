@@ -5,11 +5,13 @@
 
 import http from "http";
 import os from "os";
+import { join } from "path";
 import { generateToken } from "./utils.js";
 import { adapter } from "./adapters/index.js";
 import type { PairState } from "./types.js";
 import { validateImages, type ImageData } from "./image-utils.js";
 import { renameSession } from "./history.js";
+import { listSkills } from "./skills.js";
 
 const PORT = process.env.PORT || 8080;
 
@@ -70,6 +72,8 @@ export class HttpServer {
         await this.handleHistoryDetail(req, res, url.pathname);
       } else if (url.pathname === "/chat/rename" && req.method === "POST") {
         await this.handleRename(req, res);
+      } else if (url.pathname === "/skills/list" && req.method === "GET") {
+        await this.handleSkillsList(req, res, url);
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Not Found" }));
@@ -312,6 +316,30 @@ export class HttpServer {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "重命名失败" }));
     }
+  }
+
+  private async handleSkillsList(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
+
+    if (!this.state.paired || token !== this.state.token) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "未授权" }));
+      return;
+    }
+
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(url.searchParams.get("pageSize") || "20", 10) || 20));
+
+    const skillsDir = join(this.cwd, ".claude", "skills");
+    const allItems = listSkills(skillsDir);
+    const total = allItems.length;
+    const start = (page - 1) * pageSize;
+    const items = allItems.slice(start, start + pageSize);
+    const hasMore = start + pageSize < total;
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ items, total, page, pageSize, hasMore }));
   }
 
   private readBody(req: http.IncomingMessage, maxBytes: number = 10 * 1024 * 1024): Promise<string> {
