@@ -202,20 +202,18 @@ export class OfficialAdapter implements CCAdapter {
     if (typeof content === "string") {
       await session.send(content);
     } else {
-      if (isNewSession) {
-        await session.send(message);
-      } else {
-        const userMessage: SDKUserMessage = {
-          type: "user",
-          session_id: sessionId!,
-          message: {
-            role: "user",
-            content: content as any,
-          },
-          parent_tool_use_id: null,
-        };
-        await session.send(userMessage);
-      }
+      // 图文混合消息：必须用 SDKUserMessage 格式
+      // 新会话时 session_id 用空字符串，CLI 会自动分配
+      const userMessage: SDKUserMessage = {
+        type: "user",
+        session_id: sessionId || "",
+        message: {
+          role: "user",
+          content: content as any,
+        },
+        parent_tool_use_id: null,
+      };
+      await session.send(userMessage);
     }
 
     // === 多轮循环核心 ===
