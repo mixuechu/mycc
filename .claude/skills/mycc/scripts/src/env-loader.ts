@@ -108,12 +108,12 @@ export function loadEnvFile(...searchDirs: string[]): void {
 
 /**
  * 验证并清理 URL
- * - 必须 https:// 开头
+ * - 必须 https:// 或 http:// 开头
  * - 去除尾部斜杠和空格
  */
 function validateUrl(raw: string): string | null {
   const url = raw.trim().replace(/\/+$/, "");
-  if (!url.startsWith("https://")) {
+  if (!url.startsWith("https://") && !url.startsWith("http://")) {
     return null;
   }
   return url;

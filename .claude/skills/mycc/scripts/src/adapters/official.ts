@@ -58,7 +58,7 @@ function buildSessionOptions(model?: string) {
   const options: Parameters<typeof unstable_v2_createSession>[0] = {
     model: model || DEFAULT_MODEL,
     pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-    permissionMode: "bypassPermissions",
+    permissionMode: isRoot ? "prompt" : "bypassPermissions",
     ...(!isRoot && { allowDangerouslySkipPermissions: true }),
     env: {
       ...cleanEnv,
