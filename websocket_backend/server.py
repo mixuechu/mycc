@@ -158,8 +158,8 @@ class ClaudeMessageParser:
 
             result["content"] = "".join(text_parts)
 
-        # 过滤掉没有实际文本内容的assistant消息
-        if not result["content"].strip():
+        # 过滤掉既没有content也没有thinking/tool_calls的消息
+        if not result["content"].strip() and not result.get("thinking") and not result.get("tool_calls") and not result.get("tool_results"):
             return None
         
         return result
