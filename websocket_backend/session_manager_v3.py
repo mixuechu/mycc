@@ -29,10 +29,13 @@ class WebSocketSession:
         if self.claude_manager:
             return  # 已存在
 
+        # 使用WebSocket session ID作为Claude session ID，保持一致
         self.claude_manager = ClaudeProcessV3(
-            on_message=self._on_claude_message
+            on_message=self._on_claude_message,
+            session_id=self.session_id,  # 传递session_id
+            project_path=self.project_path
         )
-        print(f"[Session:{self.session_id}] Claude manager created")
+        print(f"[Session:{self.session_id}] Claude manager created with session_id={self.session_id}")
 
     async def _on_claude_message(self, event: Dict[str, Any]):
         """Claude 消息回调"""
@@ -79,9 +82,10 @@ class WebSocketSessionManager:
         project_path: str = "."
     ) -> WebSocketSession:
         """创建或恢复会话"""
-        # 默认使用固定session ID，让二萌永远记得所有对话
+        # 默认使用固定UUID session ID，让二萌永远记得所有对话
+        # 使用之前一直在用的session ID
         if session_id is None:
-            session_id = "mycc-main-session"
+            session_id = "12d8542f-e662-4860-9f55-19cd97dd26bc"
 
         if session_id in self.sessions:
             # 恢复现有会话

@@ -5,17 +5,23 @@ Claude Code CLI 进程管理器 V3
 import asyncio
 import json
 import os
-import uuid
 from typing import Callable, Dict, Any
 
 
 class ClaudeProcessV3:
     """简化版 - 直接转发Claude CLI输出"""
 
-    def __init__(self, on_message: Callable[[Dict[str, Any]], None]):
-        self.claude_session_id = str(uuid.uuid4())  # Claude CLI session ID
+    def __init__(self, on_message: Callable[[Dict[str, Any]], None], session_id: str = "12d8542f-e662-4860-9f55-19cd97dd26bc", project_path: str = "/home/mycc/mycc"):
+        self.claude_session_id = session_id  # 使用固定的UUID session ID
         self.on_message = on_message
         self.is_running = False
+        self.project_path = project_path
+        
+        # 检查session文件是否已存在
+        from pathlib import Path
+        encoded_path = project_path.replace("/", "-")
+        session_file = Path.home() / ".claude" / "projects" / encoded_path / f"{session_id}.jsonl"
+        self.session_exists = session_file.exists()
         self.message_count = 0  # 跟踪消息数量
 
     async def send_message(self, user_input: str, project_path: str = "."):
@@ -26,8 +32,8 @@ class ClaudeProcessV3:
         self.is_running = True
         self.message_count += 1
 
-        # 第一条消息用 --session-id 创建会话，后续用 --resume 恢复
-        if self.message_count == 1:
+        # 如果session文件已存在或不是第一条消息，用--resume；否则用--session-id创建
+        if self.message_count == 1 and not self.session_exists:
             cmd = [
                 "claude",
                 "--print",
